@@ -48,8 +48,8 @@ public class KThread {
 	}
 
 	/**
-	 * 分配（创建）一个新的 <tt>KThread</tt>。如果这是第一个 <tt>KThread</tt>，
-	 * 还会顺带创建一个 idle 线程。
+	 * 分配（创建）一个新的 <tt>KThread</tt>。如果这是first KThread,
+	 * 会顺带创建一个 idle 线程。
 	 */
 	public KThread() {
 		if (currentThread != null) {
@@ -194,6 +194,10 @@ public class KThread {
 		toBeDestroyed = currentThread;
 
 		currentThread.status = statusFinished;
+		if (currentThread.joinWaiter != null) {
+			currentThread.joinWaiter.ready();
+			currentThread.joinWaiter = null;
+		}
 
 		sleep();
 	}
@@ -274,6 +278,15 @@ public class KThread {
 
 		Lib.assertTrue(this != currentThread);
 
+		boolean intStatus = Machine.interrupt().disable();
+		Lib.assertTrue(!joinCalled);
+		// 线程已经结束也不能再 join 第二次
+		joinCalled = true;
+		if (status != statusFinished) {
+			joinWaiter = currentThread;
+			KThread.sleep();
+		}
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -395,9 +408,113 @@ public class KThread {
 	 */
 	public static void selfTest() {
 		Lib.debug(dbgThread, "Enter KThread.selfTest");
-
-		new KThread(new PingTest(1)).setName("forked thread").fork();
+		KThread ping = new KThread(new PingTest(1)).setName("forked thread");
+		ping.fork();
 		new PingTest(0).run();
+		ping.join();
+
+		joinTest1();
+		joinTest2();
+		joinTest3();
+		joinTest4();
+		// joinTest5();  // 会触发 assert，需单独运行
+		// joinTest6();  // 会触发 assert，需单独运行
+		System.out.println("join tests done");
+	}
+
+	// 子线程已经结束，join 直接返回
+	private static void joinTest1() {
+		final Semaphore finished = new Semaphore(0);
+		KThread child = new KThread(() -> {
+			Machine.interrupt().disable();
+			finished.V();
+		}).setName("join-finished");
+		child.fork();
+		finished.P();
+		Lib.assertTrue(child.status == statusFinished);
+		child.join();
+		Lib.assertTrue(Machine.interrupt().enabled());
+	}
+
+	// 子线程还在运行，调用者要阻塞
+	private static void joinTest2() {
+		final Semaphore release = new Semaphore(0);
+		final KThread parent = currentThread();
+		final boolean[] done = {false};
+		KThread child = new KThread(() -> {
+			release.P();
+			done[0] = true;
+		}).setName("join-running");
+		KThread observer = new KThread(() -> {
+			Lib.assertTrue(parent.status == statusBlocked);
+			release.V();
+		}).setName("join-observer");
+
+		boolean intStatus = Machine.interrupt().disable();
+		child.fork();
+		observer.fork();
+		child.join();
+		Lib.assertTrue(done[0] && child.status == statusFinished);
+		Lib.assertTrue(Machine.interrupt().disabled());
+		Machine.interrupt().restore(intStatus);
+		observer.join();
+	}
+
+	// 几组线程互不干扰，每个父线程依次 join 两个子线程
+	private static void joinTest3() {
+		KThread[] parents = new KThread[3];
+		for (int i = 0; i < parents.length; i++) {
+			parents[i] = new KThread(() -> {
+				for (int j = 0; j < 2; j++) {
+					final boolean[] done = {false};
+					KThread child = new KThread(() -> {
+						KThread.yield();
+						done[0] = true;
+					});
+					child.fork();
+					child.join();
+					Lib.assertTrue(done[0]);
+				}
+			}).setName("join-pair-" + i);
+			parents[i].fork();
+		}
+		for (KThread parent : parents) {
+			parent.join();
+		}
+	}
+
+	// 非父子线程之间 join，以及没人 join 的线程
+	private static void joinTest4() {
+		final Semaphore release = new Semaphore(0);
+		KThread child = new KThread(() -> release.P());
+		KThread other = new KThread(() -> child.join());
+		child.fork();
+		other.fork();
+		release.V();
+		other.join();
+		Lib.assertTrue(child.status == statusFinished);
+
+		final Semaphore finished = new Semaphore(0);
+		KThread unjoined = new KThread(() -> {
+			Machine.interrupt().disable();
+			finished.V();
+		});
+		unjoined.fork();
+		finished.P();
+		Lib.assertTrue(unjoined.status == statusFinished);
+	}
+
+	// 自己 join 自己，应该 assert
+	private static void joinTest5() {
+		currentThread().join();
+	}
+
+	// 对同一个线程 join 两次，应该 assert
+	private static void joinTest6() {
+		KThread child = new KThread(() -> {}).setName("join-twice");
+		child.fork();
+		child.join();
+		child.join();
 	}
 
 	private static final char dbgThread = 't';
@@ -429,6 +546,10 @@ public class KThread {
 	private String name = "(unnamed thread)";
 
 	private Runnable target;
+
+	// join 用到的状态
+	private boolean joinCalled = false;
+	private KThread joinWaiter = null;
 
 	private TCB tcb;
 

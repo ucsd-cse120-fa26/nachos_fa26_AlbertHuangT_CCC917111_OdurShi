@@ -56,7 +56,37 @@ public class Alarm {
 	alarmTest1();
     alarmTest2();
 	alarmTest3();
-	// Invoke your other test methods here ...
+	alarmTest4();
+	System.out.println("alarm tests done");
+    }
+
+    // cancel 只对还在等待的线程有效，而且只能成功一次
+    public static void alarmTest4() {
+        Lib.assertTrue(!ThreadedKernel.alarm.cancel(KThread.currentThread()));
+        final Semaphore started = new Semaphore(0);
+        final long[] elapsed = {0};
+        KThread sleeper = new KThread(() -> {
+            boolean intStatus = Machine.interrupt().disable();
+            long start = Machine.timer().getTime();
+            started.V();
+            ThreadedKernel.alarm.waitUntil(50000);
+            elapsed[0] = Machine.timer().getTime() - start;
+            Machine.interrupt().restore(intStatus);
+        }).setName("alarm-cancel");
+        sleeper.fork();
+        started.P();
+        boolean intStatus = Machine.interrupt().disable();
+        Lib.assertTrue(ThreadedKernel.alarm.cancel(sleeper));
+        Lib.assertTrue(!ThreadedKernel.alarm.cancel(sleeper));
+        Machine.interrupt().restore(intStatus);
+        sleeper.join();
+        Lib.assertTrue(elapsed[0] < 50000);
+        Lib.assertTrue(!ThreadedKernel.alarm.cancel(sleeper));
+
+        KThread expired = new KThread(() -> ThreadedKernel.alarm.waitUntil(1000));
+        expired.fork();
+        expired.join();
+        Lib.assertTrue(!ThreadedKernel.alarm.cancel(expired));
     }
 	/**
 	 * 分配（创建）一个新的 Alarm。把机器的 timer 中断处理函数设置为这个
@@ -120,7 +150,20 @@ public class Alarm {
 	 * @param thread 要取消其 timer 的线程。
 	 */
         public boolean cancel(KThread thread) {
-		return false;
+		boolean intStatus = Machine.interrupt().disable();
+		ThreadTime timer = null;
+		for (ThreadTime entry : waitQueue) {
+			if (entry.thread == thread) {
+				timer = entry;
+				break;
+			}
+		}
+		if (timer != null) {
+			waitQueue.remove(timer);
+			thread.ready();
+		}
+		Machine.interrupt().restore(intStatus);
+		return timer != null;
 	}
 
 	private class ThreadTime{
