@@ -1,0 +1,91 @@
+CSE 120 Fall 2026 - Project 1
+Group repo: nachos_fa26_AlbertHuangT_CCC917111_OdurShi
+
+== Group members ==
+
+- Albert Huang (alh044@ucsd.edu / GitHub: AlbertHuangT)
+- Yike Chen (yic@ucsd.edu / GitHub: CCC917111)
+- Shangqing Shi (s6shi@ucsd.edu / GitHub: OdurShi)
+
+== What we implemented ==
+
+Alarm (waitUntil, timerInterrupt, cancel)
+  Waiting threads are kept in a priority queue ordered by wake-up time.
+  waitUntil returns immediately for x <= 0; otherwise it adds the current
+  thread to the queue and sleeps with interrupts disabled. timerInterrupt
+  readies every thread whose wake-up time has passed, in time order, and
+  keeps the original yield(). cancel finds the thread's entry, removes it
+  after the search loop (to avoid modifying the queue while iterating),
+  and readies the thread; it returns false if the thread has no timer.
+
+KThread.join / finish
+  Each thread records whether join has been called on it and which thread
+  is waiting. join asserts on self-join and on a second join, returns
+  immediately if the target has finished, and otherwise sleeps. finish
+  readies the waiting thread, if any.
+
+Condition2 (sleep, wake, wakeAll, sleepFor)
+  Implemented with interrupt disable/restore instead of semaphores.
+  sleep adds the thread to a wait list and releases the lock atomically
+  before sleeping. sleepFor uses Alarm.waitUntil for the timeout and marks
+  the waiter as timed. wake uses Alarm.cancel on timed waiters; if cancel
+  fails (the timeout already fired), wake skips that waiter and wakes the
+  next one, so a wake is never spent on a thread that already timed out.
+
+Rendezvous (exchange)
+  Each Rendezvous instance has one Lock and a HashMap from tag to a
+  per-tag object holding a value slot, a state (empty / one thread
+  waiting / exchange in progress), and two condition variables. The first
+  thread stores its value and sleeps; the second swaps values and wakes
+  it. Threads that arrive while an exchange is still in progress wait in
+  a while loop on a second condition variable until the first thread has
+  picked up its value, so an in-progress exchange is never overwritten.
+  Per-tag objects are created on first use while holding the lock. No
+  thread references are stored outside locks and condition variables.
+
+== How well it worked ==
+
+All of our tests pass, and we ran them with several different -s seeds.
+
+Gradescope public tests: all 6 pass.
+
+== How we tested ==
+
+- Alarm: alarmTest1 (course sample); alarmTest2 (0 and negative waits
+  return immediately); alarmTest3 (multiple threads with different
+  durations wake in time order); alarmTest4 (cancel on waiting, expired,
+  and non-waiting threads).
+- join: joinTest1-4 (target already finished, target still running,
+  independent pairs, one thread joining several in a row, joins between
+  non-parent threads). joinTest5/6 (self-join, double join) trigger
+  asserts by design, so they are commented out and run one at a time.
+- Condition2: the course InterlockTest and cvTest5, plus sleepForTest1-5
+  (timeout with no wake, early wake, mixing sleep and sleepFor with
+  wake/wakeAll, wake skipping a waiter whose timeout already fired,
+  short timeouts mixed with wake/wakeAll).
+- Rendezvous: our test is in Rendezvous.selfTest(). It forks 120
+  threads across 4 tags and 3 Rendezvous instances; after
+  joining all of them it checks that every thread received another
+  thread's value, that pairs are mutual, and that partners used the same
+  tag and the same instance. We ran it with several -s seeds and printed the 
+  pairings once to confirm that some threads arrive while an exchange is still in
+  progress (they get paired out of arrival order), so the waiting path
+  for that case is exercised.
+
+== Contributions ==
+
+- Yike Chen: Alarm (waitUntil, timerInterrupt), Condition2 (sleep, wake,
+  wakeAll), and their tests. [confirm / add details]
+- Shangqing Shi: KThread.join/finish, Condition2.sleepFor, Alarm.cancel, and
+  their tests. [confirm / add details]
+- Albert Huang: Rendezvous and its tests; merging branches. [add details]
+
+== Use of AI tools ==
+
+- Albert: used Claude (Anthropic) as a tutor to explain Nachos code, Java,
+  and OS concepts, and to review the group's code; Claude did not write
+  implementation or test code. Claude also translated the source comments
+  into Chinese (comment-only change) and drafted this README, which we
+  then checked and edited.
+- Yike: [...]
+- Shangqing Shi: [...]
