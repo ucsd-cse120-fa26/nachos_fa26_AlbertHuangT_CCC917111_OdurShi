@@ -16,10 +16,8 @@ public class Rendezvous {
         private int value = 0;
         // 0: empty; 1: ready to swap; 2: wait until get awaken
         private int state = 0;
-        private int tag;
 
-        private Tag(int tag){
-            this.tag = tag;
+        private Tag(){
             waitSwap = new Condition(lock);
             waitEmpty = new Condition(lock);
         }
@@ -52,7 +50,7 @@ public class Rendezvous {
         // check if this tag exist
         if(this.tagMap.get(tag) == null){
             // 创建tag对象并保存回tagMap
-            Tag temporaryTag = new Tag(tag);
+            Tag temporaryTag = new Tag();
             tagMap.put(tag, temporaryTag);
         }
         Tag temporaryTag = this.tagMap.get(tag);
