@@ -27,11 +27,6 @@ public class Rendezvous {
 
     private HashMap<Integer, Tag> tagMap;
     
-    // 将要创建多少个线程用于测试
-    private static final int TestPerTag = 10;
-    private static final int TestTag = 5;
-    private static final int TestToal = TestPerTag * TestTag;
-    
     /**
      * 分配（创建）一个新的 Rendezvous。
      */
@@ -95,6 +90,12 @@ public class Rendezvous {
         return value;
     }
 
+    // 将要创建多少个线程用于测试
+    private static final int TestPerTag = 10;
+    private static final int TestInstance = 3;
+    private static final int TestTag = 4;
+    private static final int TestToal = TestPerTag * TestTag * TestInstance;
+    
     // 定义一个类叫 PingTest。
     // "implements Runnable" 表示：这个类保证自己有一个 run() 方法。
     // KThread 只接受带 run() 的对象，所以必须写这一句。
@@ -115,14 +116,12 @@ public class Rendezvous {
         }
 
         // 新线程启动之后，会自动执行这个方法。
-        // 这个方法不是你直接调用的，是 KThread 在 fork 之后替你调用的。
+        // 这个方法不是直接调用的，是 KThread 在 fork 之后替你调用的。
         public void run() {
-            // 新线程去 ping 这个会合点的 0 号位置，带着 91。
             // 如果对方还没到，新线程会停在这一行等。
-            // 交换完成后，把拿到的值存进 returnValue。
+            // 交换完成后，把拿到的值存进 returnValues。
             this.returnValues[this.number] = ping.exchange(tag, number);
-            // /////////检查拿到的是不是 78（main 带来的值）。不是的话 Nachos 报错停止。
-            // 因为配对任意, 现在由main统一检查
+            // 因为配对任意, 由main统一检查
         }
         // run() 执行到这里结束，新线程也就随之结束
     }
@@ -134,14 +133,17 @@ public class Rendezvous {
         int[] returnValues = new int[TestToal];
     
         // 创建一个会合点。main 和新线程都要用这同一个。
-        Rendezvous ping = new Rendezvous();
+        Rendezvous[] ping = new Rendezvous[TestInstance];
+        for(int i = 0; i < TestInstance; i++){
+            ping[i] = new Rendezvous();
+        }
         // 调试输出：只有运行时加了 -d t 才会打印
         Lib.debug('t', "Enter Rendezvous.selfTest");
         
         KThread[] threadArray = new KThread[TestToal];
         for(int i = 0; i < TestToal; i++){
             // 创建任务说明，并把会合点交给它
-            PingTest test = new PingTest(ping, i%TestTag, i, returnValues);
+            PingTest test = new PingTest(ping[i%TestInstance], i%TestTag, i, returnValues);
             // 创建一个新线程，把任务说明交给它
             KThread kthread = new KThread(test);
             threadArray[i] = kthread;
@@ -154,9 +156,17 @@ public class Rendezvous {
             threadArray[i].join();
         }
 
+        // print thread i, value, its tag and which instance 
         for(int i = 0; i < TestToal; i++){
-            Lib.assertTrue((returnValues[i] >= 0) && (returnValues[i] <= (TestToal-1)) && (returnValues[returnValues[i]] == i) && (returnValues[i] != i) && ((returnValues[i]%TestTag) == (i%TestTag)));
-            
+            Lib.debug('t', "Thread " + i + " got value " + returnValues[i] + " with tag " + (i%TestTag) + " in instance " + (i%TestInstance));
+        }
+        for(int i = 0; i < TestToal; i++){
+            Lib.assertTrue(returnValues[i] >= 0);
+            Lib.assertTrue(returnValues[i] <= (TestToal-1));
+            Lib.assertTrue(returnValues[returnValues[i]] == i);
+            Lib.assertTrue(returnValues[i] != i);
+            Lib.assertTrue(returnValues[i]%TestTag == i%TestTag);
+            Lib.assertTrue(returnValues[i]%TestInstance == i%TestInstance);
         }
         
         System.out.println("Rendezvous no problem!");
