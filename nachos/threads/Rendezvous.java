@@ -1,31 +1,43 @@
 package nachos.threads;
 
 import nachos.machine.*;
+import java.util.HashMap;
 
 /**
  * <i>Rendezvous</i> 让线程之间可以同步地交换值。
  */
 public class Rendezvous {
 
-    
     private Lock lock;
-    private Condition waitSwap;
-    private Condition waitEmpty;
-    private int value = 0;
-
-    //  将要创建多少个线程用于测试
-    private static final int count = 100;
     
-    // 0: empty; 1: ready to swap; 2: wait until get awaken
-    private int state = 0;
+    private class Tag{
+        private Condition waitSwap;
+        private Condition waitEmpty;
+        private int value = 0;
+        // 0: empty; 1: ready to swap; 2: wait until get awaken
+        private int state = 0;
+        private int tag;
+
+        private Tag(int tag){
+            this.tag = tag;
+            waitSwap = new Condition(lock);
+            waitEmpty = new Condition(lock);
+        }
+    }
+
+    private HashMap<Integer, Tag> tagMap;
+    
+    // 将要创建多少个线程用于测试
+    private static final int TestPerTag = 10;
+    private static final int TestTag = 5;
+    private static final int TestToal = TestPerTag * TestTag;
     
     /**
      * 分配（创建）一个新的 Rendezvous。
      */
     public Rendezvous () {
         lock = new Lock();
-        waitSwap = new Condition(lock);
-        waitEmpty = new Condition(lock);
+        tagMap = new HashMap<Integer, Tag>();
     }
 
     /**
@@ -42,35 +54,42 @@ public class Rendezvous {
     public int exchange (int tag, int value) {
         lock.acquire();
 
+        // check if this tag exist
+        if(this.tagMap.get(tag) == null){
+            // 创建tag对象并保存回tagMap
+            Tag temporaryTag = new Tag(tag);
+            tagMap.put(tag, temporaryTag);
+        }
+        Tag temporaryTag = this.tagMap.get(tag);
         // if there are 2 threads in progress of swaping
-        while(this.state == 2){
-            waitEmpty.sleep();
+        while(temporaryTag.state == 2){
+            temporaryTag.waitEmpty.sleep();
         }
         // if there is not any threads waiting
-        if (this.state == 0) {
-            state = 1;
-            this.value = value;
+        if (temporaryTag.state == 0) {
+            temporaryTag.state = 1;
+            temporaryTag.value = value;
             
-            waitSwap.sleep();
+            temporaryTag.waitSwap.sleep();
 
-            value = this.value;
-            this.value = 0;
+            value = temporaryTag.value;
+            temporaryTag.value = 0;
 
-            state = 0;
+            temporaryTag.state = 0;
 
             // wake exactly 2 threads so that do not waste resources
-            waitEmpty.wake();
-            waitEmpty.wake();
+            temporaryTag.waitEmpty.wake();
+            temporaryTag.waitEmpty.wake();
             lock.release();
-        } else if (this.state == 1){
-            state = 2;
+        } else if (temporaryTag.state == 1){
+            temporaryTag.state = 2;
 
             // switch value
-            value = this.value ^ value;
-            this.value = this.value ^ value;
-            value = this.value ^ value;
+            value = temporaryTag.value ^ value;
+            temporaryTag.value = temporaryTag.value ^ value;
+            value = temporaryTag.value ^ value;
             
-            waitSwap.wake();
+            temporaryTag.waitSwap.wake();
             lock.release();
         }
         return value;
@@ -83,12 +102,14 @@ public class Rendezvous {
 
         // 字段：新线程要去的那个会合点
         private Rendezvous ping;
+        private int tag;
         private int number;
         private int[] returnValues;
         // 构造函数：创建 PingTest 时，外面要传进来一个会合点
-        PingTest(Rendezvous ping, int number, int[] returnValues) {
+        PingTest(Rendezvous ping, int tag, int number, int[] returnValues) {
             // 把传进来的会合点存进自己的字段，这样 run() 里才能用到它
             this.ping = ping;
+            this.tag = tag;
             this.number = number;
             this.returnValues = returnValues;
         }
@@ -99,7 +120,7 @@ public class Rendezvous {
             // 新线程去 ping 这个会合点的 0 号位置，带着 91。
             // 如果对方还没到，新线程会停在这一行等。
             // 交换完成后，把拿到的值存进 returnValue。
-            this.returnValues[this.number] = ping.exchange(0, number);
+            this.returnValues[this.number] = ping.exchange(tag, number);
             // /////////检查拿到的是不是 78（main 带来的值）。不是的话 Nachos 报错停止。
             // 因为配对任意, 现在由main统一检查
         }
@@ -110,17 +131,17 @@ public class Rendezvous {
     // 测试的入口。ThreadedKernel.selfTest() 会调用它，执行它的是 main 线程。
     public static void selfTest() {
         // 局部变量：用来存 main 交换后拿到的值
-        int[] returnValues = new int[count];
+        int[] returnValues = new int[TestToal];
     
         // 创建一个会合点。main 和新线程都要用这同一个。
         Rendezvous ping = new Rendezvous();
         // 调试输出：只有运行时加了 -d t 才会打印
         Lib.debug('t', "Enter Rendezvous.selfTest");
         
-        KThread[] threadArray = new KThread[count];
-        for(int i = 0; i < count; i++){
+        KThread[] threadArray = new KThread[TestToal];
+        for(int i = 0; i < TestToal; i++){
             // 创建任务说明，并把会合点交给它
-            PingTest test = new PingTest(ping, i, returnValues);
+            PingTest test = new PingTest(ping, i%TestTag, i, returnValues);
             // 创建一个新线程，把任务说明交给它
             KThread kthread = new KThread(test);
             threadArray[i] = kthread;
@@ -129,19 +150,15 @@ public class Rendezvous {
             kthread.fork();
         }
 
-        for(int i = 0; i < count; i++){
+        for(int i = 0; i < TestToal; i++){
             threadArray[i].join();
         }
 
-        for(int i = 0; i < count; i++){
-            Lib.assertTrue((returnValues[i] >= 0) && (returnValues[i] <= (count-1)) && (returnValues[returnValues[i]] == i) && (returnValues[i] != i));
+        for(int i = 0; i < TestToal; i++){
+            Lib.assertTrue((returnValues[i] >= 0) && (returnValues[i] <= (TestToal-1)) && (returnValues[returnValues[i]] == i) && (returnValues[i] != i) && ((returnValues[i]%TestTag) == (i%TestTag)));
+            
         }
-        // main 自己去 ping 的 0 号位置，带着 78。
-        // 这时会合点没有人，所以 main 停在这一行等。
-        // main 一停下，新线程就得到了运行机会，去执行上面的 run()。
-        // 新线程带着 91 到达，两边交换，main 被叫醒，拿到 91。
-        // 检查 main 拿到的是不是 91（新线程带来的值）
-        // 能执行到这一行，说明上面的检查都通过了
+        
         System.out.println("Rendezvous no problem!");
     }
 
