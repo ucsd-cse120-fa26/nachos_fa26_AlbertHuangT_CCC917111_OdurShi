@@ -387,7 +387,10 @@ public class KThread {
 		Lib.assertTrue(this == currentThread);
 	}
 
-	private static class PingTest implements Runnable {
+	private static class PingTest implements Runnable{
+	
+	    private int which;
+	
 		PingTest(int which) {
 			this.which = which;
 		}
@@ -396,11 +399,9 @@ public class KThread {
 			for (int i = 0; i < 5; i++) {
 				System.out.println("*** thread " + which + " looped " + i
 						+ " times");
-				currentThread.yield();
-			}
+				KThread.yield(); // 将currentThread.yield()改为KThread.yield()
+			}                    // 因为yield是static方法, 只对当前跑的唯一一个线程起作用
 		}
-
-		private int which;
 	}
 
 	/**

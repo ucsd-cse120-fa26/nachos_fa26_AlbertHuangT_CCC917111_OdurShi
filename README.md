@@ -9,6 +9,7 @@ https://cseweb.ucsd.edu/classes/fa26/cse120-001/projects/index.html
 *Start early, start often!*
 
 == Use of AI tools ==
+
 We used Claude (Anthropic) as a tutor: to explain the existing Nachos code
 and OS concepts, and to translate the source comments into Chinese
 (comment-only change, verified to leave the code unchanged). All
