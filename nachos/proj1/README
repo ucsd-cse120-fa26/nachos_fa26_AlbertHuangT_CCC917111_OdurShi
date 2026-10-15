@@ -78,7 +78,7 @@ Gradescope public tests: all 6 pass.
   wakeAll), and their tests. [confirm / add details]
 - Shangqing Shi: KThread.join/finish, Condition2.sleepFor, Alarm.cancel, and
   their tests. [confirm / add details]
-- Albert Huang: Rendezvous and its tests; merging branches. [add details]
+- Albert Huang: Rendezvous and its tests; merging branches. 
 
 == Use of AI tools ==
 
