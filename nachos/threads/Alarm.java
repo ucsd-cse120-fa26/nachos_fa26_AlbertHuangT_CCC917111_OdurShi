@@ -9,53 +9,53 @@ public class Alarm {
 	// Add Alarm testing code to the Alarm class
     
     public static void alarmTest1() {
-	int durations[] = {1000, 10*1000, 100*1000};
-	long t0, t1;
+		int durations[] = {1000, 10*1000, 100*1000};
+		long t0, t1;
 
-	for (int d : durations) {
-	    t0 = Machine.timer().getTime();
-	    ThreadedKernel.alarm.waitUntil (d);
-	    t1 = Machine.timer().getTime();
-	    System.out.println ("alarmTest1: waited for " + (t1 - t0) + " ticks");
-	}
+		for (int d : durations) {
+	    	t0 = Machine.timer().getTime();
+	    	ThreadedKernel.alarm.waitUntil (d);
+	    	t1 = Machine.timer().getTime();
+	   	 	System.out.println ("alarmTest1: waited for " + (t1 - t0) + " ticks");
+		}
     }
 	public static void alarmTest2() {
-    long[] durations = {0, -100};          
-    for (long d : durations) {             
-        long t0 = Machine.timer().getTime();   
-        ThreadedKernel.alarm.waitUntil(d);    
-        long t1 = Machine.timer().getTime();   
-        System.out.println("alarmTest2: waitUntil(" + d + ") waited for "
+    	long[] durations = {0, -100};          
+    	for (long d : durations) {             
+        	long t0 = Machine.timer().getTime();   
+        	ThreadedKernel.alarm.waitUntil(d);    
+        	long t1 = Machine.timer().getTime();   
+        	System.out.println("alarmTest2: waitUntil(" + d + ") waited for "
                            + (t1 - t0) + " ticks");
-    }
+    	}
 	}
 	public static void alarmTest3() {
-    long[] durations = {3000, 1000, 2000};   
+    	long[] durations = {3000, 1000, 2000};   
 
-    for (int i = 0; i < durations.length; i++) {
-        final long d = durations[i];         
-        final int id = i;                   
+   	 	for (int i = 0; i < durations.length; i++) {
+        	final long d = durations[i];         
+        	final int id = i;                   
 
-        new KThread(() -> {                
-            long t0 = Machine.timer().getTime();
-            ThreadedKernel.alarm.waitUntil(d);
-            long t1 = Machine.timer().getTime();
-            System.out.println("alarmTest3: thread " + id + " asked for " + d
+        	new KThread(() -> {                
+            	long t0 = Machine.timer().getTime();
+            	ThreadedKernel.alarm.waitUntil(d);
+            	long t1 = Machine.timer().getTime();
+            	System.out.println("alarmTest3: thread " + id + " asked for " + d
                                + ", woke at " + t1 + ", waited " + (t1 - t0));
-        }).setName("alarmTest3-" + i).fork();  
-    }
+        	}).setName("alarmTest3-" + i).fork();  
+   	 	}
 
-    // 主线程自己等一段比所有子线程都长的时间，保证它们都醒来打印完
-    ThreadedKernel.alarm.waitUntil(5000);
-    System.out.println("alarmTest3: main thread done");
+
+    	ThreadedKernel.alarm.waitUntil(5000);
+    	System.out.println("alarmTest3: main thread done");
 	}
     // Implement more test methods here ...
 
     // Invoke Alarm.selfTest() from ThreadedKernel.selfTest()
     public static void selfTest() {
-	alarmTest1();
-    alarmTest2();
-	alarmTest3();
+		alarmTest1();
+    	alarmTest2();
+		alarmTest3();
 	// Invoke your other test methods here ...
     }
 	/**
@@ -119,8 +119,21 @@ public class Alarm {
 	 * <p>
 	 * @param thread 要取消其 timer 的线程。
 	 */
-        public boolean cancel(KThread thread) {
-		return false;
+    public boolean cancel(KThread thread) {
+		boolean intStatus = Machine.interrupt().disable();
+		ThreadTime toRemove = null;
+		for (ThreadTime tt : waitQueue) {
+			if (tt.thread == thread) {
+				toRemove = tt;
+				break;
+			}
+		}
+		if (toRemove != null) {
+			waitQueue.remove(toRemove);
+			toRemove.thread.ready();
+		}
+		Machine.interrupt().restore(intStatus);
+		return toRemove != null;
 	}
 
 	private class ThreadTime{
