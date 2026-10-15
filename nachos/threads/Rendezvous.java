@@ -11,15 +11,15 @@ public class Rendezvous {
     private Lock lock;
     
     private class Tag{
-        private Condition waitSwap;
-        private Condition waitEmpty;
+        private Condition2 waitSwap;
+        private Condition2 waitEmpty;
         private int value = 0;
         // 0: empty; 1: ready to swap; 2: wait until get awaken
         private int state = 0;
 
         private Tag(){
-            waitSwap = new Condition(lock);
-            waitEmpty = new Condition(lock);
+            waitSwap = new Condition2(lock);
+            waitEmpty = new Condition2(lock);
         }
     }
 

@@ -70,18 +70,18 @@ public class Condition2 {
 		}
 	}
 
-        /**
+    /**
 	 * 原子地释放关联的 lock，并在这个 condition variable 上 sleep，直到
 	 * (1) 另一个线程用 <tt>wake()</tt> 把它唤醒，或者 (2) 指定的
 	 * <i>timeout</i> 时间已经过去。当前线程必须持有关联的 lock。在
 	 * <tt>sleep()</tt> 返回之前，线程会自动重新获取这个 lock。如果 timeout
 	 * 为负数或 0，则立即返回。
 	 */
-        public void sleepFor(long timeout) {
+    public void sleepFor(long timeout) {
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
-		if (timeout <= 0)
+		if (timeout <= 0) {
 			return;
-
+		}
 		boolean intStatus = Machine.interrupt().disable();
 		Waiter waiter = new Waiter(KThread.currentThread(), true);
 		waitQueue.add(waiter);
