@@ -75,7 +75,7 @@ Gradescope public tests: all 6 pass.
 == Contributions ==
 
 - Yike Chen: Alarm (waitUntil, timerInterrupt), Condition2 (sleep, wake,
-  wakeAll), and their tests. [confirm / add details]
+  wakeAll), and their tests. 
 - Shangqing Shi: KThread.join/finish, Condition2.sleepFor, Alarm.cancel, and
   their tests. [confirm / add details]
 - Albert Huang: Rendezvous and its tests; merging branches. 
@@ -87,5 +87,7 @@ Gradescope public tests: all 6 pass.
   implementation or test code. Claude also translated the source comments
   into Chinese (comment-only change) and drafted this README, which we
   then checked and edited.
-- Yike: [...]
+- Yike: use Claude to help translated the source comments
+  into Chinese (comment-only change) and explain the OS concepts and code. 
+  Claude also helps to provide the ideas of the issues that can be tested.
 - Shangqing Shi: [...]
