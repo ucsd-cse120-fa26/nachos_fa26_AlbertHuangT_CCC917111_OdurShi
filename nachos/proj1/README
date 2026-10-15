@@ -76,8 +76,8 @@ Gradescope public tests: all 6 pass.
 
 - Yike Chen: Alarm (waitUntil, timerInterrupt), Condition2 (sleep, wake,
   wakeAll), and their tests. 
-- Shangqing Shi: KThread.join/finish, Condition2.sleepFor, Alarm.cancel, and
-  their tests. [confirm / add details]
+- Shangqing Shi: KThread.join/finish, Condition2.sleepFor, Alarm.cancel,
+  timed-waiter handling in Condition2.wake, and related tests.
 - Albert Huang: Rendezvous and its tests; merging branches. 
 
 == Use of AI tools ==
@@ -90,4 +90,7 @@ Gradescope public tests: all 6 pass.
 - Yike: use Claude to help translated the source comments
   into Chinese (comment-only change) and explain the OS concepts and code. 
   Claude also helps to provide the ideas of the issues that can be tested.
-- Shangqing Shi: [...]
+- Shangqing Shi: used Codex (OpenAI) as a tutor to explain Nachos code,
+  Java, and OS synchronization concepts, review my implementations,
+  and run existing tests. It did not write or modify implementation
+  or test code during this assistance.
