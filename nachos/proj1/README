@@ -59,10 +59,13 @@ Gradescope public tests: all 6 pass.
   independent pairs, one thread joining several in a row, joins between
   non-parent threads). joinTest5/6 (self-join, double join) trigger
   asserts by design, so they are commented out and run one at a time.
-- Condition2: the course InterlockTest and cvTest5, plus sleepForTest1-5
-  (timeout with no wake, early wake, mixing sleep and sleepFor with
-  wake/wakeAll, wake skipping a waiter whose timeout already fired,
-  short timeouts mixed with wake/wakeAll).
+- Condition2: the course InterlockTest and cvTest5, cvTestWake (wake
+  wakes only one of several sleeping threads, wakeAll wakes the rest)，
+  cvTestLostWake (wake and wakeAll with no waiting threads have no
+  effect； and a thread that sleeps afterwards still blocks);
+  plus sleepForTest1-5 (timeout with no wake, early wake, mixing sleep 
+  and sleepFor with wake/wakeAll, wake skipping a waiter whose timeout
+  already fired, short timeouts mixed with wake/wakeAll).
 - Rendezvous: our test is in Rendezvous.selfTest(). It forks 120
   threads across 4 tags and 3 Rendezvous instances; after
   joining all of them it checks that every thread received another
