@@ -18,6 +18,9 @@ import java.io.EOFException;
  * @see nachos.network.NetProcess
  */
 public class UserProcess {
+
+	private OpenFile[] fileTable = new OpenFile[16];
+
 	/**
 	 * 分配（创建）一个新进程。
 	 */
@@ -26,7 +29,13 @@ public class UserProcess {
 		pageTable = new TranslationEntry[numPhysPages];
 		for (int i = 0; i < numPhysPages; i++)
 			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+
+		fileTable[0] = UserKernel.console.openForReading();
+		fileTable[1] = UserKernel.console.openForWriting();
+
 	}
+
+
 
 	/**
 	 * 分配并返回一个正确类型的新进程。类名由 <tt>nachos.conf</tt> 中的 key
@@ -354,6 +363,129 @@ public class UserProcess {
 		processor.writeRegister(Processor.regA1, argv);
 	}
 
+	private int handleCreate(int nameAddress) {
+		String name = readVirtualMemoryString(nameAddress, 256);
+		if (name == null)
+			return -1;
+		
+		for (int fd = 0; fd < fileTable.length; fd++) {
+			if (fileTable[fd] == null) {
+				OpenFile file = ThreadedKernel.fileSystem.open(name, true);
+				if (file == null)
+				    return -1;
+
+				fileTable[fd] = file;
+				return fd;
+			}
+		}
+		return -1;
+	}
+
+	private int handleWrite(int fd, int bufferAddress, int count) {
+		if (fd < 0 || fd >= fileTable.length || fileTable[fd] == null) {
+			return -1;
+		}
+		if (count < 0) {
+			return -1;
+		}
+
+		if (count == 0) {
+			return 0;
+		}
+
+		byte[] buffer = new byte[Math.min(count, pageSize)];
+		int total = 0;
+		while (total < count) {
+			int amount = Math.min(buffer.length, count - total);
+			int copied = readVirtualMemory(bufferAddress + total, buffer, 0, amount);
+			if (copied != amount) {
+				return -1;
+			}
+			int written = fileTable[fd].write(buffer, 0, amount);
+			if (written != amount) {
+				return -1;
+			}
+			total += written;
+		}
+
+		return total;
+	}
+
+	private int handleRead(int fd, int bufferAddress, int count) {
+		if (fd < 0 || fd >= fileTable.length || fileTable[fd] == null) {
+			return -1;
+		}
+		if (count < 0) {
+			return -1;
+		}
+
+		if (count == 0) {
+			return 0;
+		}
+
+		byte[] buffer = new byte[Math.min(count, pageSize)];
+		int total = 0;
+		while (total < count) {
+			int amount = Math.min(buffer.length, count - total);
+			int bytesRead = fileTable[fd].read(buffer, 0, amount);
+			if (bytesRead < 0)
+				return -1;
+			if (bytesRead == 0)
+				break;
+			
+			int copied = writeVirtualMemory(bufferAddress + total, buffer, 0, bytesRead);
+			if (copied != bytesRead) 
+				return -1;	
+
+			total += bytesRead;
+
+			if (bytesRead < amount) 
+				break;
+			
+		}
+
+		return total;
+	}
+
+	private int handleClose(int fd) {
+		if (fd < 0 || fd >= fileTable.length || fileTable[fd] == null) {
+			return -1;
+		}
+		fileTable[fd].close();
+		fileTable[fd] = null;
+		return 0;
+	}
+
+	private int handleOpen(int nameAddress) {
+		String name = readVirtualMemoryString(nameAddress, 256);
+		if (name == null) {
+			return -1;
+		}
+		for (int fd = 0; fd < fileTable.length; fd++) {
+			if (fileTable[fd] == null) {
+				OpenFile file = ThreadedKernel.fileSystem.open(name, false);
+				if (file == null) {
+					return -1;
+				}
+				fileTable[fd] = file;
+				return fd;
+			}
+		}
+		return -1;	
+	}
+
+	private int handleUnlink(int nameAddress) {
+		String name = readVirtualMemoryString(nameAddress, 256);
+		if (name == null) {
+			return -1;
+		}
+		boolean removed = ThreadedKernel.fileSystem.remove(name);
+
+		if (removed)
+		    return 0;
+		return -1;
+	}
+
 	/**
 	 * 处理 halt() 系统调用。
 	 */
@@ -460,7 +592,18 @@ public class UserProcess {
 			return handleHalt();
 		case syscallExit:
 			return handleExit(a0);
-
+		case syscallWrite:
+			return handleWrite(a0, a1, a2);
+		case syscallCreate:
+			return handleCreate(a0);
+		case syscallClose:
+			return handleClose(a0);
+		case syscallOpen:
+			return handleOpen(a0);
+		case syscallRead:
+			return handleRead(a0, a1, a2);
+		case syscallUnlink:
+			return handleUnlink(a0);
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
