@@ -6,60 +6,51 @@ import nachos.machine.*;
  * 利用硬件 timer 来实现抢占（preemption），并让线程可以 sleep 到某个时间点。
  */
 public class Alarm {
-	// Add Alarm testing code to the Alarm class
     
+	// Add Alarm testing code to the Alarm class
     public static void alarmTest1() {
-	int durations[] = {1000, 10*1000, 100*1000};
-	long t0, t1;
+        int durations[] = {1000, 10*1000, 100*1000};
+        long t0, t1;
 
-	for (int d : durations) {
-	    t0 = Machine.timer().getTime();
-	    ThreadedKernel.alarm.waitUntil (d);
-	    t1 = Machine.timer().getTime();
-	    System.out.println ("alarmTest1: waited for " + (t1 - t0) + " ticks");
-	}
+        for (int d : durations) {
+    	    t0 = Machine.timer().getTime();
+    	    ThreadedKernel.alarm.waitUntil (d);
+    	    t1 = Machine.timer().getTime();
+    	    System.out.println ("alarmTest1: waited for " + (t1 - t0) + " ticks");
+    	}
     }
+    
 	public static void alarmTest2() {
-    long[] durations = {0, -100};          
-    for (long d : durations) {             
-        long t0 = Machine.timer().getTime();   
-        ThreadedKernel.alarm.waitUntil(d);    
-        long t1 = Machine.timer().getTime();   
-        System.out.println("alarmTest2: waitUntil(" + d + ") waited for "
-                           + (t1 - t0) + " ticks");
-    }
+        long[] durations = {0, -100};          
+        for (long d : durations) {             
+            long t0 = Machine.timer().getTime();   
+            ThreadedKernel.alarm.waitUntil(d);    
+            long t1 = Machine.timer().getTime();   
+            System.out.println("alarmTest2: waitUntil(" + d + ") waited for "
+                               + (t1 - t0) + " ticks");
+        }
 	}
 	public static void alarmTest3() {
-    long[] durations = {3000, 1000, 2000};   
-
-    for (int i = 0; i < durations.length; i++) {
-        final long d = durations[i];         
-        final int id = i;                   
-
-        new KThread(() -> {                
-            long t0 = Machine.timer().getTime();
-            ThreadedKernel.alarm.waitUntil(d);
-            long t1 = Machine.timer().getTime();
-            System.out.println("alarmTest3: thread " + id + " asked for " + d
-                               + ", woke at " + t1 + ", waited " + (t1 - t0));
-        }).setName("alarmTest3-" + i).fork();  
+        long[] durations = {3000, 1000, 2000};   
+    
+        for (int i = 0; i < durations.length; i++) {
+            final long d = durations[i];         
+            final int id = i;                   
+    
+            new KThread(() -> {                
+                long t0 = Machine.timer().getTime();
+                ThreadedKernel.alarm.waitUntil(d);
+                long t1 = Machine.timer().getTime();
+                System.out.println("alarmTest3: thread " + id + " asked for " + d
+                                   + ", woke at " + t1 + ", waited " + (t1 - t0));
+            }).setName("alarmTest3-" + i).fork();  
+        }
+        // 主线程自己等一段比所有子线程都长的时间，保证它们都醒来打印完
+        ThreadedKernel.alarm.waitUntil(5000);
+        System.out.println("alarmTest3: main thread done");
     }
-
-    // 主线程自己等一段比所有子线程都长的时间，保证它们都醒来打印完
-    ThreadedKernel.alarm.waitUntil(5000);
-    System.out.println("alarmTest3: main thread done");
-	}
+    
     // Implement more test methods here ...
-
-    // Invoke Alarm.selfTest() from ThreadedKernel.selfTest()
-    public static void selfTest() {
-	alarmTest1();
-    alarmTest2();
-	alarmTest3();
-	alarmTest4();
-	System.out.println("alarm tests done");
-    }
-
     // cancel 只对还在等待的线程有效，而且只能成功一次
     public static void alarmTest4() {
         Lib.assertTrue(!ThreadedKernel.alarm.cancel(KThread.currentThread()));
@@ -88,6 +79,16 @@ public class Alarm {
         expired.join();
         Lib.assertTrue(!ThreadedKernel.alarm.cancel(expired));
     }
+
+    // Invoke Alarm.selfTest() from ThreadedKernel.selfTest()
+    public static void selfTest() {
+    	alarmTest1();
+        alarmTest2();
+    	alarmTest3();
+    	alarmTest4();
+        System.out.println("alarm tests done");
+    }
+    
 	/**
 	 * 分配（创建）一个新的 Alarm。把机器的 timer 中断处理函数设置为这个
 	 * alarm 的回调函数。
@@ -141,7 +142,7 @@ public class Alarm {
 		Machine.interrupt().restore(intStatus);
 	}
 
-        /**
+    /**
 	 * 取消 <i>thread</i> 设置的任何 timer，相当于立即唤醒这个线程（把它放入
 	 * scheduler 的 ready set），并返回 true。如果 <i>thread</i> 没有设置
 	 * timer，则返回 false。
@@ -149,7 +150,7 @@ public class Alarm {
 	 * <p>
 	 * @param thread 要取消其 timer 的线程。
 	 */
-        public boolean cancel(KThread thread) {
+    public boolean cancel(KThread thread) {
 		boolean intStatus = Machine.interrupt().disable();
 		ThreadTime timer = null;
 		for (ThreadTime entry : waitQueue) {
@@ -158,6 +159,7 @@ public class Alarm {
 				break;
 			}
 		}
+		
 		if (timer != null) {
 			waitQueue.remove(timer);
 			thread.ready();

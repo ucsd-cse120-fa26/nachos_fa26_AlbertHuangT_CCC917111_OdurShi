@@ -159,6 +159,9 @@ public class Condition2 {
     public static void selfTest() {
         new InterlockTest();
         cvTest5();
+        cvTestWake();
+        cvTestLostWake();
+        //cvTestNoLock(); 
         sleepForTest1();
         sleepForTest2();
         sleepForTest3();
@@ -418,5 +421,90 @@ public class Condition2 {
         consumer.join();
         producer.join();
         //for (int i = 0; i < 50; i++) { KThread.currentThread().yield(); }
+    }
+
+    private static void cvTestWake() {
+        final Lock lock = new Lock();
+        final Condition2 cv = new Condition2(lock);
+        final int[] woken = {0};               // 记录有几个线程醒来了
+        KThread[] sleepers = new KThread[3];
+
+        for (int i = 0; i < 3; i++) {
+        final int id = i;
+        sleepers[i] = new KThread(new Runnable() {
+            public void run() {
+                lock.acquire();
+                System.out.println("cvTestWake: thread " + id + " sleeping");
+                cv.sleep();
+                woken[0]++;
+                System.out.println("cvTestWake: thread " + id + " woke up");
+                lock.release();
+            }
+        }).setName("sleeper" + i);
+        sleepers[i].fork();
+        }
+
+    // 让 3 个线程都有机会运行并睡下
+        for (int i = 0; i < 10; i++) KThread.yield();
+
+        lock.acquire();
+        cv.wake();                              // 只叫醒一个
+        lock.release();
+
+        for (int i = 0; i < 10; i++) KThread.yield();
+        System.out.println("cvTestWake: after wake(), woken = " + woken[0] + " (expect 1)");
+        Lib.assertTrue(woken[0] == 1, "wake() should wake exactly one thread");
+
+        lock.acquire();
+        cv.wakeAll();                           // 叫醒剩下的全部
+        lock.release();
+
+        for (int i = 0; i < 3; i++) sleepers[i].join();
+        System.out.println("cvTestWake: after wakeAll(), woken = " + woken[0] + " (expect 3)");
+        Lib.assertTrue(woken[0] == 3, "wakeAll() should wake all threads");
+    }
+
+    private static void cvTestLostWake() {
+        final Lock lock = new Lock();
+        final Condition2 cv = new Condition2(lock);
+        final boolean[] woke = {false};
+
+        // 此时没有任何线程在等，这两次通知应该"丢失"
+        lock.acquire();
+        cv.wake();
+        cv.wakeAll();
+        lock.release();
+
+        // 创建一个新的线程，让它去睡觉
+        KThread t = new KThread(new Runnable() {
+            public void run() {
+                lock.acquire();
+                System.out.println("cvTestLostWake: T going to sleep");
+                cv.sleep();
+                woke[0] = true;
+                System.out.println("cvTestLostWake: T woke up");
+                lock.release();
+            }
+        }).setName("lostWakeT");
+        t.fork();
+
+        for (int i = 0; i < 10; i++) KThread.yield();
+        System.out.println("cvTestLostWake: T should still be sleeping, woke = " + woke[0] + " (expect false)");
+        Lib.assertTrue(!woke[0], "earlier wake/wakeAll should have been lost");
+
+        lock.acquire();
+        cv.wake();                              // 这次有人在等，应该叫醒 T
+        lock.release();
+
+        t.join();
+        System.out.println("cvTestLostWake: done, woke = " + woke[0] + " (expect true)");
+        }
+
+    private static void cvTestNoLock() {
+        final Lock lock = new Lock();
+        final Condition2 cv = new Condition2(lock);
+        System.out.println("cvTestNoLock: calling wake() without the lock, should assert");
+        cv.wake();
+        System.out.println("cvTestNoLock: ERROR, should not get here");
     }
 }

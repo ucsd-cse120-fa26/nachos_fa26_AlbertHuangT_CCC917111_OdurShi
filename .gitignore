@@ -15,3 +15,5 @@
 *.o
 *.coff
 libnachos.a
+
+.claude/
