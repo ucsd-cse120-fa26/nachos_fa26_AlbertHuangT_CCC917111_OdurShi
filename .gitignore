@@ -11,3 +11,7 @@
 # zed 编辑器
 .zed/
 
+# ignore excutable files
+*.o
+*.coff
+libnachos.a
