@@ -22,10 +22,10 @@ public class UserProcess {
 	 * 分配（创建）一个新进程。
 	 */
 	public UserProcess() {
-		int numPhysPages = Machine.processor().getNumPhysPages();
-		pageTable = new TranslationEntry[numPhysPages];
-		for (int i = 0; i < numPhysPages; i++)
-			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+		// int numPhysPages = Machine.processor().getNumPhysPages();
+		// pageTable = new TranslationEntry[numPhysPages];
+		// for (int i = 0; i < numPhysPages; i++)
+		//      pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
 	}
 
 	/**
@@ -303,12 +303,17 @@ public class UserProcess {
 	 * @return 如果各个 section 被成功加载，返回 <tt>true</tt>。
 	 */
 	protected boolean loadSections() {
-		if (numPages > Machine.processor().getNumPhysPages()) {
-			coff.close();
-			Lib.debug(dbgProcess, "\tinsufficient physical memory");
+	    int[] allocatedPages = UserKernel.allocatePages(numPages);
+		if (allocatedPages == null) {
+    		coff.close();
+    		Lib.debug(dbgProcess, "\tinsufficient physical memory");
 			return false;
 		}
 
+		pageTable = new TranslationEntry[numPages];
+		for (int i = 0; i < numPages; i++) {
+            pageTable[i] = new TranslationEntry(i, allocatedPages[i], true, false, false, false);
+        }
 		// 加载各个 section
 		for (int s = 0; s < coff.getNumSections(); s++) {
 			CoffSection section = coff.getSection(s);
@@ -320,7 +325,9 @@ public class UserProcess {
 				int vpn = section.getFirstVPN() + i;
 
 				// 暂时先假定虚拟地址 = 物理地址
-				section.loadPage(i, vpn);
+				section.loadPage(i, allocatedPages[vpn]);
+
+				pageTable[vpn].readOnly = section.isReadOnly();
 			}
 		}
 
@@ -331,6 +338,8 @@ public class UserProcess {
 	 * 释放 <tt>loadSections()</tt> 分配的所有资源。
 	 */
 	protected void unloadSections() {
+	    UserKernel.releasePages(pageTable);
+		pageTable = null;
 	}
 
 	/**
