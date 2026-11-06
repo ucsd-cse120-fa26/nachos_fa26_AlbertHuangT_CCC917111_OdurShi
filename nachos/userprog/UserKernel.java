@@ -3,6 +3,7 @@ package nachos.userprog;
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
+import java.util.LinkedList;
 
 /**
  * 一个可以支持多个用户进程的内核。
@@ -20,7 +21,8 @@ public class UserKernel extends ThreadedKernel {
 	 */
 	public void initialize(String[] args) {
 		super.initialize(args);
-
+		freePagesLock = new Lock();
+		initFreePages();
 		console = new SynchConsole(Machine.console());
 
 		Machine.processor().setExceptionHandler(new Runnable() {
@@ -126,4 +128,47 @@ public class UserKernel extends ThreadedKernel {
 
 	// 一些 dummy 变量，让 javac 更"聪明"（顺带把这些类也编译进来）
 	private static Coff dummy1 = null;
+
+	// privete static linked array to track free pages
+	private static LinkedList<Integer> freePages;
+	// Lock to protect freePages
+	private static Lock freePagesLock;
+
+	// init free pages
+	public static void initFreePages(){
+	    freePages = new LinkedList<Integer>();
+        for (int i = 0; i < Machine.processor().getNumPhysPages(); i++) {
+            freePages.add(i);
+        }
+	}
+	
+	// distribute freePages
+	public static int[] allocatePages(int need){
+	    freePagesLock.acquire();
+		if(need > freePages.size()){
+		    freePagesLock.release();
+		    return null;
+		}
+		int[] allocatedPages = new int[need];
+		for(int i = 0; i < need; i++){
+		    allocatedPages[i] = freePages.removeFirst();
+		}
+		freePagesLock.release();
+		return allocatedPages;
+	}
+	
+	// free usedPages
+	public static void releasePages(TranslationEntry[] pageTable){
+	    freePagesLock.acquire();
+	    if(pageTable == null){
+			freePagesLock.release();
+			return;
+		}
+
+		for(int i = 0; i < pageTable.length; i++){
+		    freePages.add(pageTable[i].ppn);
+		}
+		freePagesLock.release();
+		return;
+	}
 }
