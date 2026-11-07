@@ -132,19 +132,31 @@ public class UserProcess {
 	 * @return 成功传输的字节数。
 	 */
 	public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
-		Lib.assertTrue(offset >= 0 && length >= 0
-				&& offset + length <= data.length);
+		Lib.assertTrue(offset >= 0 && length >= 0 && offset + length <= data.length);
 
 		byte[] memory = Machine.processor().getMemory();
 
-		// 暂时先假定虚拟地址等于物理地址
-		if (vaddr < 0 || vaddr >= memory.length)
-			return 0;
+		int currentVirtualAddress = vaddr;
+		int dataIndex = offset;
+		int copied = 0;
 
-		int amount = Math.min(length, memory.length - vaddr);
-		System.arraycopy(memory, vaddr, data, offset, amount);
+		while(copied < length){
+		    int virtualPageNumber = Processor.pageFromAddress(currentVirtualAddress);
+			int pageOffset = Processor.offsetFromAddress(currentVirtualAddress);
 
-		return amount;
+			if((virtualPageNumber < 0) || (virtualPageNumber >= pageTable.length) || !pageTable[virtualPageNumber].valid){
+			    break;
+			}
+
+			int amount = Math.min(length - copied, pageSize - pageOffset);
+			int currentPhysicalAddress = currentVirtualAddress + (pageTable[virtualPageNumber].ppn - virtualPageNumber) * pageSize;
+			System.arraycopy(memory, currentPhysicalAddress, data, dataIndex, amount);
+            copied += amount;
+            currentVirtualAddress += amount;
+            dataIndex += amount;
+		}
+
+		return copied;
 	}
 
 	/**
@@ -176,14 +188,27 @@ public class UserProcess {
 
 		byte[] memory = Machine.processor().getMemory();
 
-		// 暂时先假定虚拟地址等于物理地址
-		if (vaddr < 0 || vaddr >= memory.length)
-			return 0;
+		int currentVirtualAddress = vaddr;
+		int dataIndex = offset;
+		int wrote = 0;
 
-		int amount = Math.min(length, memory.length - vaddr);
-		System.arraycopy(data, offset, memory, vaddr, amount);
+		while(wrote < length){
+		    int virtualPageNumber = Processor.pageFromAddress(currentVirtualAddress);
+			int pageOffset = Processor.offsetFromAddress(currentVirtualAddress);
 
-		return amount;
+			if((virtualPageNumber < 0) || (virtualPageNumber >= pageTable.length) || !pageTable[virtualPageNumber].valid || pageTable[virtualPageNumber].readOnly){
+			    break;
+			}
+
+			int amount = Math.min(length - wrote, pageSize - pageOffset);
+			int currentPhysicalAddress = currentVirtualAddress + (pageTable[virtualPageNumber].ppn - virtualPageNumber) * pageSize;
+			System.arraycopy(data, dataIndex, memory, currentPhysicalAddress, amount);
+            wrote += amount;
+            currentVirtualAddress += amount;
+            dataIndex += amount;
+		}
+
+		return wrote;
 	}
 
 	/**

@@ -138,7 +138,7 @@ public class UserKernel extends ThreadedKernel {
 	public static void initFreePages(){
 	    freePages = new LinkedList<Integer>();
         for (int i = 0; i < Machine.processor().getNumPhysPages(); i++) {
-            freePages.add(i);
+            freePages.addFirst(i);
         }
 	}
 	
