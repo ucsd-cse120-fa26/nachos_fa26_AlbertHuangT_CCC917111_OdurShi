@@ -6,6 +6,8 @@ import nachos.userprog.*;
 import nachos.vm.*;
 
 import java.io.EOFException;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * 封装一个用户进程中不属于其用户线程的那部分状态。这包括它的地址翻译状态、
@@ -20,19 +22,24 @@ import java.io.EOFException;
 public class UserProcess {
 
 	private OpenFile[] fileTable = new OpenFile[16];
+	private static int nextPid = 0;
+	private static int liveProcesses = 0;
+	private final int pid;
+	// Only the parent accesses this map; exited children remain until joined.
+	private final HashMap<Integer, UserProcess> children = new HashMap<Integer, UserProcess>();
+	private int exitStatus;
+	private boolean abnormalExit;
 
 	/**
 	 * 分配（创建）一个新进程。
 	 */
 	public UserProcess() {
-		int numPhysPages = Machine.processor().getNumPhysPages();
-		pageTable = new TranslationEntry[numPhysPages];
-		for (int i = 0; i < numPhysPages; i++)
-			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+		boolean intStatus = Machine.interrupt().disable();
+		pid = nextPid++;
+		Machine.interrupt().restore(intStatus);
 
 		fileTable[0] = UserKernel.console.openForReading();
 		fileTable[1] = UserKernel.console.openForWriting();
-
 	}
 
 
@@ -72,6 +79,9 @@ public class UserProcess {
 			return false;
 
 		thread = new UThread(this);
+		boolean intStatus = Machine.interrupt().disable();
+		liveProcesses++;
+		Machine.interrupt().restore(intStatus);
 		thread.setName(name).fork();
 
 		return true;
@@ -141,19 +151,31 @@ public class UserProcess {
 	 * @return 成功传输的字节数。
 	 */
 	public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
-		Lib.assertTrue(offset >= 0 && length >= 0
-				&& offset + length <= data.length);
+		Lib.assertTrue(offset >= 0 && length >= 0 && offset + length <= data.length);
 
 		byte[] memory = Machine.processor().getMemory();
 
-		// 暂时先假定虚拟地址等于物理地址
-		if (vaddr < 0 || vaddr >= memory.length)
-			return 0;
+		int currentVirtualAddress = vaddr;
+		int dataIndex = offset;
+		int copied = 0;
 
-		int amount = Math.min(length, memory.length - vaddr);
-		System.arraycopy(memory, vaddr, data, offset, amount);
+		while(copied < length){
+		    int virtualPageNumber = Processor.pageFromAddress(currentVirtualAddress);
+			int pageOffset = Processor.offsetFromAddress(currentVirtualAddress);
 
-		return amount;
+			if((virtualPageNumber < 0) || (virtualPageNumber >= pageTable.length) || !pageTable[virtualPageNumber].valid){
+			    break;
+			}
+
+			int amount = Math.min(length - copied, pageSize - pageOffset);
+			int currentPhysicalAddress = currentVirtualAddress + (pageTable[virtualPageNumber].ppn - virtualPageNumber) * pageSize;
+			System.arraycopy(memory, currentPhysicalAddress, data, dataIndex, amount);
+            copied += amount;
+            currentVirtualAddress += amount;
+            dataIndex += amount;
+		}
+
+		return copied;
 	}
 
 	/**
@@ -185,14 +207,27 @@ public class UserProcess {
 
 		byte[] memory = Machine.processor().getMemory();
 
-		// 暂时先假定虚拟地址等于物理地址
-		if (vaddr < 0 || vaddr >= memory.length)
-			return 0;
+		int currentVirtualAddress = vaddr;
+		int dataIndex = offset;
+		int wrote = 0;
 
-		int amount = Math.min(length, memory.length - vaddr);
-		System.arraycopy(data, offset, memory, vaddr, amount);
+		while(wrote < length){
+		    int virtualPageNumber = Processor.pageFromAddress(currentVirtualAddress);
+			int pageOffset = Processor.offsetFromAddress(currentVirtualAddress);
 
-		return amount;
+			if((virtualPageNumber < 0) || (virtualPageNumber >= pageTable.length) || !pageTable[virtualPageNumber].valid || pageTable[virtualPageNumber].readOnly){
+			    break;
+			}
+
+			int amount = Math.min(length - wrote, pageSize - pageOffset);
+			int currentPhysicalAddress = currentVirtualAddress + (pageTable[virtualPageNumber].ppn - virtualPageNumber) * pageSize;
+			System.arraycopy(data, dataIndex, memory, currentPhysicalAddress, amount);
+            wrote += amount;
+            currentVirtualAddress += amount;
+            dataIndex += amount;
+		}
+
+		return wrote;
 	}
 
 	/**
@@ -312,12 +347,17 @@ public class UserProcess {
 	 * @return 如果各个 section 被成功加载，返回 <tt>true</tt>。
 	 */
 	protected boolean loadSections() {
-		if (numPages > Machine.processor().getNumPhysPages()) {
+	    int[] allocatedPages = UserKernel.allocatePages(numPages);
+		if (allocatedPages == null) {
 			coff.close();
 			Lib.debug(dbgProcess, "\tinsufficient physical memory");
 			return false;
 		}
 
+		pageTable = new TranslationEntry[numPages];
+		for (int i = 0; i < numPages; i++) {
+            pageTable[i] = new TranslationEntry(i, allocatedPages[i], true, false, false, false);
+        }
 		// 加载各个 section
 		for (int s = 0; s < coff.getNumSections(); s++) {
 			CoffSection section = coff.getSection(s);
@@ -329,7 +369,9 @@ public class UserProcess {
 				int vpn = section.getFirstVPN() + i;
 
 				// 暂时先假定虚拟地址 = 物理地址
-				section.loadPage(i, vpn);
+				section.loadPage(i, allocatedPages[vpn]);
+
+				pageTable[vpn].readOnly = section.isReadOnly();
 			}
 		}
 
@@ -340,6 +382,8 @@ public class UserProcess {
 	 * 释放 <tt>loadSections()</tt> 分配的所有资源。
 	 */
 	protected void unloadSections() {
+	    UserKernel.releasePages(pageTable);
+		pageTable = null;
 	}
 
 	/**
@@ -490,6 +534,9 @@ public class UserProcess {
 	 * 处理 halt() 系统调用。
 	 */
 	private int handleHalt() {
+		if (pid != 0)
+			return -1;
+
 		Lib.debug(dbgProcess, "UserProcess.handleHalt");
 
 		Machine.halt();
@@ -507,12 +554,107 @@ public class UserProcess {
 		// ……并且要让它保持为 handleExit 的第一条语句，
 		// 这样我们才能给你的实现评分。
 
-		// 暂时只是把退出状态的值打印出来方便调试，
-		// 然后无条件终止（目前只有一个进程）
-		System.out.println ("UserProcess.handleExit (" + status + ")");
-		Kernel.kernel.terminate();
+		exitStatus = status;
+		closeFiles();
+		unloadSections();
+		if (coff != null) {
+			coff.close();
+			coff = null;
+		}
+		children.clear();
+
+		boolean intStatus = Machine.interrupt().disable();
+		boolean lastProcess = --liveProcesses == 0;
+		Machine.interrupt().restore(intStatus);
+		if (lastProcess)
+			Kernel.kernel.terminate();
+		KThread.finish();
 
 		return 0;
+	}
+
+	/** Close descriptors on exit, or when a newly created child cannot load. */
+	private void closeFiles() {
+		for (int fd = 0; fd < fileTable.length; fd++) {
+			if (fileTable[fd] != null) {
+				fileTable[fd].close();
+				fileTable[fd] = null;
+			}
+		}
+	}
+
+	private int handleExec(int file, int argc, int argv) {
+		// Even empty arguments require four pointer bytes and a terminator.
+		if (file == 0 || argc < 0 || argc > pageSize / 5)
+			return -1;
+		String name = readVirtualMemoryString(file, 256);
+		if (name == null || !name.endsWith(".coff"))
+			return -1;
+		if (argc > 0 && argv == 0)
+			return -1;
+
+		ArrayList<String> args = new ArrayList<String>();
+		byte[] pointer = new byte[4];
+		int argumentBytes = 0;
+		for (int i = 0; i < argc; i++) {
+			long entryAddress = (long) argv + 4L * i;
+			if (entryAddress < 0 || entryAddress > Integer.MAX_VALUE - 3
+					|| readVirtualMemory((int) entryAddress, pointer) != 4)
+				return -1;
+			int address = Lib.bytesToInt(pointer, 0);
+			if (address == 0)
+				return -1;
+			String arg = readVirtualMemoryString(address, 256);
+			if (arg == null)
+				return -1;
+			argumentBytes += 4 + arg.getBytes().length + 1;
+			if (argumentBytes > pageSize)
+				return -1;
+			args.add(arg);
+		}
+
+		UserProcess child = UserProcess.newUserProcess();
+		// Register before fork: the child may exit before execute returns.
+		children.put(child.pid, child);
+		if (!child.execute(name, args.toArray(new String[args.size()]))) {
+			children.remove(child.pid);
+			// load already closes the executable on failure; no thread was forked.
+			child.closeFiles();
+			return -1;
+		}
+		return child.pid;
+	}
+
+	/** Validate the whole status word without modifying user memory. */
+	private boolean writableStatus(int address) {
+		long lastAddress = (long) address + 3;
+		if (address < 0 || lastAddress > Integer.MAX_VALUE || pageTable == null)
+			return false;
+		int firstPage = Processor.pageFromAddress(address);
+		int lastPage = Processor.pageFromAddress((int) lastAddress);
+		if (lastPage >= pageTable.length)
+			return false;
+		for (int vpn = firstPage; vpn <= lastPage; vpn++) {
+			TranslationEntry entry = pageTable[vpn];
+			if (entry == null || !entry.valid || entry.readOnly
+					|| entry.ppn < 0 || entry.ppn >= Machine.processor().getNumPhysPages())
+				return false;
+		}
+		return true;
+	}
+
+	private int handleJoin(int childPid, int status) {
+		UserProcess child = children.get(childPid);
+		if (child == null || (status != 0 && !writableStatus(status)))
+			return -1;
+
+		child.thread.join();
+		children.remove(childPid);
+		if (child.abnormalExit)
+			return 0;
+		if (status != 0 && writeVirtualMemory(status, Lib.bytesFromInt(child.exitStatus)) != 4)
+			return -1;
+		return 1;
 	}
 
 	private static final int syscallHalt = 0,
@@ -592,6 +734,10 @@ public class UserProcess {
 			return handleHalt();
 		case syscallExit:
 			return handleExit(a0);
+		case syscallExec:
+			return handleExec(a0, a1, a2);
+		case syscallJoin:
+			return handleJoin(a0, a1);
 		case syscallWrite:
 			return handleWrite(a0, a1, a2);
 		case syscallCreate:
@@ -606,9 +752,8 @@ public class UserProcess {
 			return handleUnlink(a0);
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
-			Lib.assertNotReached("Unknown system call!");
+			return -1;
 		}
-		return 0;
 	}
 
 	/**
@@ -635,7 +780,8 @@ public class UserProcess {
 		default:
 			Lib.debug(dbgProcess, "Unexpected exception: "
 					+ Processor.exceptionNames[cause]);
-			Lib.assertNotReached("Unexpected exception");
+			abnormalExit = true;
+			handleExit(-1);
 		}
 	}
 

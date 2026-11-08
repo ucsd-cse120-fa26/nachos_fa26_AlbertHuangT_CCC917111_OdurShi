@@ -1,0 +1,87 @@
+CSE 120 Fall 2026 - Project 2
+Group repo: nachos_fa26_AlbertHuangT_CCC917111_OdurShi
+
+Group members and contributions
+
+- Yike Chen (CCC917111): Part 1 file system calls and initial C tests,
+  from commit 6272238 on dev/Yike.
+- Albert Huang (AlbertHuangT): Part 2 physical page allocation, process
+  page tables, page release and virtual-memory copies, including commit
+  5068b13 on dev/Albert.
+- Shangqing Shi (OdurShi): Part 3 process management (exec, join, exit),
+  process IDs, parent-child relationships, exception cleanup, root-only
+  halt, and related tests.
+
+Implementation
+
+Part 1 provides 16 per-process descriptors, initially including stdin
+and stdout, and implements creat/open/read/write/close/unlink using the
+stub filesystem and virtual-memory copies.
+
+Part 2 maintains a locked global free-page list. loadSections allocates
+individual physical pages and installs per-process translations, including
+read-only COFF pages. unloadSections returns those pages. Virtual-memory
+copies translate each page and stop on invalid or read-only destinations.
+
+Part 3 implements exec, join and exit with unique process IDs and
+per-process child tables. exec validates arguments and loads a new child;
+join uses KThread.join and returns a direct child's exit status once.
+Normal and abnormal exits close files and free memory. Interrupt-protected
+counters track process IDs and live processes. Only the root process can
+call halt, and the last exiting process terminates the kernel. Invalid
+syscall arguments return -1.
+
+Validation performed on November 7, 2026 (America/Los_Angeles)
+
+Java: clean build with Eclipse Temurin Java 21 on macOS.
+C: the official Fall 2026 MIPS cross-compiler in a temporary Ubuntu 22.04
+container, with qemu-i386 for its legacy x86 binaries. The resulting COFF
+programs were executed by the local Nachos simulator.
+
+All 24 program/seed/memory configurations passed:
+- Official exit1, except1, exec1, join1 and execarg1 examples.
+- Root halt.coff.
+- p3_test: 668 checks each with seeds 1, 2, 3, 7, 42 and 99. Covers argument
+  contents and limits, cross-page filename/argv/status copies, null/invalid
+  pointers, argument-page overflow, negative exit status, parent-only join,
+  duplicate join, exceptions, code-page write protection, child halt,
+  private descriptors, monotonic PIDs and repeated process creation.
+  A gated child verifies that invalid join status returns before waiting.
+- p3_lowmem: 40 rounds each at 20, 32 and 64 physical pages. These allow
+  0, 1 and 3 blocked children respectively. Each round also attempts 40
+  failed execs at capacity, then joins children and reuses the freed pages.
+- p3_orphan: seeds 1, 7 and 42. The parent exits first, and its child
+  continues, fails to halt as an orphan, and exits last.
+- Existing write_basic, create_basic, read_basic, fd_limits and io_pages.
+- sh.coff: echo hello, cat exit1.c, and exit.
+
+A diagnostic autograder outside the submitted source tree recorded actual
+exit statuses and inspected final resource counts. Every exit-based run
+ended with zero live processes, all physical pages free and zero stub
+filesystem handles. Root halt is intentionally an immediate machine stop.
+The negative-status test handles the sign itself because the supplied
+test-library atoi does not recognize '-'. No library code was changed.
+
+To reproduce on ieng6 after prepping the course environment:
+  cd nachos/proj2
+  make test
+  make
+  nachos -x join1.coff
+  nachos -s 1 -x p3_test.coff
+  nachos -m 20 -x p3_lowmem.coff
+  nachos -m 32 -x p3_lowmem.coff
+  nachos -m 64 -x p3_lowmem.coff
+  nachos -x p3_orphan.coff
+  nachos -x sh.coff
+
+The final code has not been run on ieng6 or submitted to Gradescope during
+this session. Local test success is not a claim about hidden-grader results.
+
+Sources
+
+Specifications:
+https://cseweb.ucsd.edu/classes/fa26/cse120-001/projects/project2.html
+https://cseweb.ucsd.edu/classes/fa26/cse120-001/projects/exec-testing.html
+
+exit1.c, except1.c, exec1.c, join1.c and execarg1.c are unchanged official
+course examples downloaded from the testing page.

@@ -30,6 +30,7 @@ LIB = assert atoi printf readline stdio strncmp strcat strcmp strcpy strlen memc
 NLIB = libnachos.a
 
 TARGETS = halt sh matmult sort echo cat cp mv rm write_basic create_basic read_basic fd_limits io_pages
+TARGETS += exit1 except1 exec1 join1 execarg1 p3_child p3_test p3_orphan p3_lowmem
 
 .SECONDARY: $(patsubst %.c,%.o,$(wildcard *.c))
 
