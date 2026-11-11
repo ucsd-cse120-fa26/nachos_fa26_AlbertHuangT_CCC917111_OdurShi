@@ -263,6 +263,7 @@ public class UserProcess {
 			CoffSection section = coff.getSection(s);
 			if (section.getLength() < 0){
 				coff.close();
+				Lib.debug(dbgProcess, "\tinvalid section length");
 				return false;
 			}
 			if (section.getFirstVPN() != numPages) {
