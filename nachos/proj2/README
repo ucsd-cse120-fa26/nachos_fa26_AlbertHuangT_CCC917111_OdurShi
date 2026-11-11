@@ -74,8 +74,7 @@ To reproduce on ieng6 after prepping the course environment:
   nachos -x p3_orphan.coff
   nachos -x sh.coff
 
-The final code has not been run on ieng6 or submitted to Gradescope during
-this session. Local test success is not a claim about hidden-grader results.
+Local test success is not a claim about hidden-grader results.
 
 Sources
 
