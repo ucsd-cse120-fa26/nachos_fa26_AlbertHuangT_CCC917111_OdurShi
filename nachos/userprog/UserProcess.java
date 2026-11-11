@@ -261,6 +261,10 @@ public class UserProcess {
 		numPages = 0;
 		for (int s = 0; s < coff.getNumSections(); s++) {
 			CoffSection section = coff.getSection(s);
+			if (section.getLength() < 0){
+				coff.close();
+				return false;
+			}
 			if (section.getFirstVPN() != numPages) {
 				coff.close();
 				Lib.debug(dbgProcess, "\tfragmented executable");
