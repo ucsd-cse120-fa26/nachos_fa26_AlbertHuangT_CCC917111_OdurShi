@@ -413,6 +413,9 @@ public class UserProcess {
 	}
 
 	private int handleCreate(int nameAddress) {
+		if (nameAddress == 0) {
+			return -1;
+		}
 		String name = readVirtualMemoryString(nameAddress, 256);
 		if (name == null)
 			return -1;
@@ -440,6 +443,10 @@ public class UserProcess {
 
 		if (count == 0) {
 			return 0;
+		}
+
+		if (bufferAddress == 0) {
+			return -1;
 		}
 
 		byte[] buffer = new byte[Math.min(count, pageSize)];
@@ -512,6 +519,9 @@ public class UserProcess {
 	}
 
 	private int handleOpen(int nameAddress) {
+		if (nameAddress == 0) {
+			return -1;
+		}
 		String name = readVirtualMemoryString(nameAddress, 256);
 		if (name == null) {
 			return -1;
@@ -530,6 +540,9 @@ public class UserProcess {
 	}
 
 	private int handleUnlink(int nameAddress) {
+		if (nameAddress == 0) {
+			return -1;
+		}
 		String name = readVirtualMemoryString(nameAddress, 256);
 		if (name == null) {
 			return -1;
