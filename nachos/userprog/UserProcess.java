@@ -472,6 +472,12 @@ public class UserProcess {
 			return 0;
 		}
 
+		int firstPage = Processor.pageFromAddress(bufferAddress);
+		if (firstPage >= pageTable.length || !pageTable[firstPage].valid
+				|| pageTable[firstPage].readOnly) {
+			return -1;
+		}
+
 		byte[] buffer = new byte[Math.min(count, pageSize)];
 		int total = 0;
 		while (total < count) {
