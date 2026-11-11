@@ -380,6 +380,10 @@ public class UserProcess {
 			}
 		}
 
+		byte[] zeros = new byte[pageSize];
+		for (int vpn = numPages - stackPages - 1; vpn < numPages; vpn++) {
+			writeVirtualMemory(vpn * pageSize, zeros);
+		}
 		return true;
 	}
 
